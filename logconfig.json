@@ -1,0 +1,33 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "normal": {
+            "format": "[%(asctime)s - %(levelname)s - line(%(lineno)d) - %(filename)s] > %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "normal"
+        },
+        "file_handler": {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "level": "WARNING",
+            "formatter": "normal",
+            "filename": "./info.log"
+        }
+    },
+    "loggers": {
+        "sgx_crawler": {
+            "level": "DEBUG",
+            "handlers": [
+                "console",
+                "file_handler"
+            ],
+            "propagate": true
+        }
+    }
+}
