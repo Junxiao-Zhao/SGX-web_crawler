@@ -2,10 +2,12 @@ import os
 import argparse
 import logging
 import logging.config
+import pprint
+from logging_tree import printout, tree
 from datetime import datetime
 from sgx_crawler import sgx_crawler, load_config
 
-descrip = "This is a sampel crawler to retrieve files from https://www.sgx.com/research-education/derivatives#Historical%20Commodities%20Daily%20Settlement%20Price"
+descrip = "This is a sample crawler to retrieve files from https://www.sgx.com/research-education/derivatives#Historical%20Commodities%20Daily%20Settlement%20Price"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=descrip)
@@ -42,6 +44,10 @@ if __name__ == "__main__":
                         type=str,
                         const=None,
                         help="load the configuration file for the logger")
+    parser.add_argument("-sc",
+                        "--showconfig",
+                        action="store_true",
+                        help="show the crawler and logger configuration")
     # type: history/today/last trade date
     parser.add_argument("-t",
                         "--type",
@@ -68,22 +74,23 @@ if __name__ == "__main__":
                         action="store_true",
                         help="refresh existing files")
 
+    # from start
+    parser.add_argument("-s",
+                        "--start",
+                        action="store_true",
+                        help="start from 'start-from' in the config file")
+
     # parse args
     args = parser.parse_args()
 
-    if args.version:  # --version
+    if args.version:  # -v
         print("sample crawler script version", args.version)
         exit()
 
-    # could not work without --type
-    elif args.type is None:
-        print("WARNING: --type isn't specified")
-        exit()
-
-    if not args.files:  # --files
+    if not args.files:  # -f
         args.files = [0, 1, 2, 3]
 
-    if args.logconfig:  # --logconfig
+    if args.logconfig:  # -lc
         # use given logger if the config file exists
         logconfig = load_config(args.logconfig)
         logging.config.dictConfig(logconfig)
@@ -92,7 +99,30 @@ if __name__ == "__main__":
     else:
         logger = None
 
-    # sgx = sgx_crawler(args.crawlerconfig, logger)
-    print(args)
+    # create the crawler
+    sgx = sgx_crawler(args.crawlerconfig, logger, args.start)
+
+    if args.showconfig:  # -sc
+        print("\n\nCrawler Configuration:")
+        pprint.pprint(sgx.config)
+        print("\n\nLogger Configuration:")
+        printout((sgx.logger.name, sgx.logger, []))
+        exit()
+
+    # could not work without type
+    if args.type is None:  # -t
+        print("WARNING: --type isn't specified")
+        exit()
+
+    args.type = args.type[0]
+    if args.type == "last":
+        sgx.download_specify(args.files, False, args.refresh)
+    elif args.type == "today":
+        sgx.download_specify(args.files, True, args.refresh)
+    else:
+        sgx.download_history(args.files, args.refresh)
+
+    # print(args)
+    # print(sgx.pendings)
 
     # if args.mode == "once":

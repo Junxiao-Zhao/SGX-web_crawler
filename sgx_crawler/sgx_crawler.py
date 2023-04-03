@@ -9,17 +9,22 @@ from datetime import datetime
 local_crawler_config = os.path.join(os.path.dirname(__file__),
                                     'crawlerconfig.json')
 local_log_config = os.path.join(os.path.dirname(__file__), 'logconfig.json')
+default_filenames = [
+    "WEBPXTICK_DT-%s.", "TickData_structure-%s.", "TC-%s.", "TC_structure-%s."
+]
 
 
 class sgx_crawler:
 
     def __init__(self,
                  config_path: str = None,
-                 logger: logging.Logger = None) -> None:
+                 logger: logging.Logger = None,
+                 from_start=False) -> None:
         """A crawler to download SGX data
 
         :param config_path: the path of the configuration file; if None then use default
         :param logger: the Logger; if None then use default
+        :param from_start: start from "start-from" if True else from "resume-from"
         """
 
         try:
@@ -41,11 +46,19 @@ class sgx_crawler:
             self.get_download = self.config["get-download"]
             self.headers_pool = self.config["headers-pool"]
             self.file_folder = list(self.config["file-folder"].items())
-            self.index = max(
-                (self.config["resume-from"], self.config["start-from"], 31))
+            self.index = max(self.config["start-from"],
+                             1) if from_start else max(
+                                 self.config["resume-from"], 1)
 
-            self.pendings = list()  # failed tasks waiting for retrying
-            self.datestr = ""
+            # failed tasks waiting for retrying
+            self.pendings = self.config[  # load failed tasks when resume
+                "failed-tasks"] if not from_start else list()
+            self.max_pending_len = self.config["max-pending-length"]
+            self.datestr = [0, ""]
+
+            if self.pendings:  # retry first
+                self.retry()
+
         except Exception as e:
             self.logger.exception(e, exc_info=False)
             exit()
@@ -53,13 +66,23 @@ class sgx_crawler:
     def retry(self) -> None:
         """Retry the failed tasks"""
 
-        self.logger.info("Resume pending tasks")
+        self.logger.info("Resuming failed tasks...")
+
+        num_pending = len(self.pendings)
 
         retry_tasks, self.pendings = self.pendings, list()
 
         while retry_tasks:
             args = retry_tasks.pop(0)
             self.download_single(*args, refresh=True)
+
+        remain = len(self.pendings)
+        self.logger.info("Finish resume: total %d, success: %d, fail: %d" %
+                         (num_pending, num_pending - remain, remain))
+
+        # write to file
+        self.config["failed-tasks"] = self.pendings
+        write_config(self.config_path, self.config, self.logger)
 
     def download_history(self, files: list, refresh: bool = False) -> None:
         """Download all history files start from self.index
@@ -68,49 +91,54 @@ class sgx_crawler:
         :param refresh: refresh the existing files with new downloads, default False
         """
 
-        if self.pendings:  # retry first
-            self.retry()
+        try:
+            indicator = -1
+            while indicator != 2:
 
-        indicator = -1
-        while indicator != 2:
+                # stop when having too many failed tasks
+                if len(self.pendings) > self.max_pending_len:
+                    self.logger.critical("Over %d tasks failed" %
+                                         self.max_pending_len)
 
-            # stop when having too many failed tasks
-            if len(self.pendings) > 20:
-                self.logger.critical(
-                    "Over 20 tasks failed -- Check Internet Connection")
+                    # try to resume
+                    self.retry()
+
+                    # cannot resume any of them
+                    if len(self.pendings) >= self.max_pending_len:
+                        self.logger.critical(
+                            "Retry failed -- Check Internet Connection")
+
+                        self.index += 1
+                        break
+
+                # download files
+                for id in files:
+                    indicator = self.download_single(self.index, id, refresh)
+                    # no record found --> all history files are retrieved
+                    if indicator == 2:
+                        break
+
                 self.index += 1
-                break
 
-            # download files
-            for id in files:
-                indicator = self.download_single(self.index, id, refresh)
-                # no record found --> all history files are retrieved
-                if indicator == 2:
-                    break
+                # update status every 50 index
+                if self.index % 50 == 0:
+                    self.config["resume-from"] = self.index
+                    self.config["failed-tasks"] = self.pendings
+                    write_config(self.config_path, self.config, self.logger)
 
-            self.index += 1
-
-            # update resume-from every 50 files
-            if self.index % 50 == 0:
-                self.config[
-                    "resume-from"] = self.index if not self.pendings else self.pendings[
-                        0][0]
-                write_config(self.config_path, self.config, self.logger)
+        except KeyboardInterrupt:
+            self.logger.exception("Keyboard Interrupt", exc_info=False)
 
         self.index -= 1
         self.logger.debug("Stop update")
 
-        # if there exists failed tasks
         if self.pendings:
-            # save the index of the first failed task to config
             self.logger.warning("There exist failed tasks")
-            self.config["resume-from"] = self.pendings[0][0]
-        # no failed
         else:
-            # save the next index to config
             self.logger.info("All Success")
-            self.config["resume-from"] = self.index
 
+        self.config["resume-from"] = self.index
+        self.config["failed-tasks"] = self.pendings
         write_config(self.config_path, self.config, self.logger)
 
     def download_specify(self,
@@ -124,12 +152,10 @@ class sgx_crawler:
         :param refresh: refresh the existing files with new downloads, default False
         """
 
-        if self.pendings:  # retry first
-            self.retry()
-
         # check if trade date
         if today_only and not self.is_trade_date(datetime.now()):
-            self.logger.warning("Today isn't a trade date")
+            self.logger.warning(
+                "Today isn't a trade date/Today's files haven't been uploaded")
             return
 
         today = datetime.today()
@@ -143,7 +169,7 @@ class sgx_crawler:
         if not today_only or (today - date).days == 0:
             for id in files:
                 self.download_single(index, id, refresh)
-            self.logger.info("Success to download")
+            self.logger.info("Finish")
             return
 
         self.logger.warning("Today files haven't been uploaded")
@@ -174,8 +200,8 @@ class sgx_crawler:
             return 0
 
         # check index
-        if index < 31:
-            self.logger.warning("index out of range [31, ]")
+        if index < 1:
+            self.logger.warning("index out of range [1, ]")
             return 0
 
         # config the download link
@@ -204,33 +230,42 @@ class sgx_crawler:
             filename = re.findall(r"[\S]+\s[a-z]+=([\S]+)",
                                   r.headers["Content-Disposition"])[0]
 
-            # extract date from WEBPXTICK_DT-*.zip
-            if file_id == 0:
-                self.datestr = re.findall(r"[A-Z]+(-[0-9]+\.).+", filename)[0]
-            # add date the filename of *_structure.dat
-            elif file_id & 1:
+            # if we don't have the date
+            if self.datestr[0] != index:
+                # extract date from filename
+                filedate = re.findall(r"[0-9]+", filename)
+                if filedate:  # if filename contains date
+                    self.datestr = [index, filedate[0]]
 
-                if self.datestr == "":  # try to get the exact date
+                # extract from WEBPXTICK_DT-*.zip
+                else:
                     kwargs = self.get_download.copy()
                     kwargs["url"] += str(index) + self.file_folder[0][0]
+                    kwargs["stream"] = True  # just get filename
                     r_temp = get(kwargs, self.headers_pool, self.logger)
 
                     try:
-                        self.datestr = re.findall(
-                            r".+(-[0-9]+\.).+",
+                        filedate = re.findall(
+                            r"[0-9]+",
                             r_temp.headers["Content-Disposition"])[0]
+                        self.datestr = [index, filedate]
                     except Exception:
-                        pass
+                        self.logger.warning(
+                            "Fail to get the date; use index in the filename instead"
+                        )
 
-                temp = filename.split(".")
-                mid = self.datestr if self.datestr != "" else f"-{index}."
-                filename = temp[0] + mid + temp[1]
+            name_ext = filename.split(".")
+            mid = self.datestr[1] if self.datestr[0] == index else str(index)
+            # use extension from filename if exists else use default
+            ext = name_ext[1] if len(
+                name_ext) == 2 else self.file_folder[file_id][0].split(".")[1]
+            filename = default_filenames[file_id] % mid + ext
 
             # failed to write the file, add this task to pendings
             if not write(self.file_folder[file_id][1], filename, r,
                          self.logger, refresh):
                 self.logger.error(
-                    "Fail to download/write: index %d, file_id %d; retry later"
+                    "Fail to download/write: index %d, file_id %d; add to pendings"
                     % (index, file_id))
                 self.pendings.append((index, file_id))
                 return 1

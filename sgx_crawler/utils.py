@@ -70,10 +70,10 @@ def get(kwargs: dict, headers_pool: list,
         except Exception as e:
             logger.exception(e, exc_info=False)
 
+        i -= 1
         # sleep 30s before next try
         if i > 0:
             sleep(30)
-        i -= 1
 
     return None
 
@@ -135,46 +135,52 @@ def date_to_index(date: datetime, headers_pool: list,
     # calculate a close but may not be correct
     interval = (date - relation[0]).days
     if interval < 0:
+        logger.warning("The given date should after 2023-03-31")
         return (0, None)
+
     try_index = int(interval / 7 * 5) + relation[1]
-
     pre_date = relation[0]
-    while try_index >= relation[1]:
-        cur_url = url % try_index
-        r = get({
-            "url": cur_url,
-            "timeout": 10,
-            "stream": True
-        }, headers_pool, logger)
 
-        if r is None:  # Internet Error
-            return (0, None)
+    try:
+        while try_index >= relation[1]:
+            cur_url = url % try_index
+            r = get({
+                "url": cur_url,
+                "timeout": 10,
+                "stream": True
+            }, headers_pool, logger)
 
-        # index out of range
-        if r.headers["Content-Type"] == "text/html; charset=utf-8":
-            pre_date = None
-            try_index -= 1
-
-        # check the date
-        elif r.headers["Content-Type"] == "application/download":
-            file_date = datetime.strptime(
-                re.findall(r".+_([0-9]+).+",
-                           r.headers["Content-Disposition"])[0], "%Y%m%d")
-
-            delta = (date - file_date).days
-
-            if delta == 0:  # found
-                return (try_index, date)
-
-            elif delta > 0:
-
-                if pre_date is None:  # the last trade date
-                    return (try_index, file_date)
-
-                pre_date = file_date
-                try_index += 1
-
-            else:  # should not happen
+            if r is None:  # Internet Error
                 return (0, None)
+
+            # index out of range
+            if r.headers["Content-Type"] == "text/html; charset=utf-8":
+                pre_date = None
+                try_index -= 1
+
+            # check the date
+            elif r.headers["Content-Type"] == "application/download":
+                file_date = datetime.strptime(
+                    re.findall(r".+_([0-9]+).+",
+                               r.headers["Content-Disposition"])[0], "%Y%m%d")
+
+                delta = (date - file_date).days
+
+                if delta == 0:  # found
+                    return (try_index, date)
+
+                elif delta > 0:
+
+                    if pre_date is None:  # the last trade date
+                        return (try_index, file_date)
+
+                    pre_date = file_date
+                    try_index += 1
+
+                else:  # should not happen
+                    return (0, None)
+
+    except Exception as e:
+        logger.exception(e, exc_info=False)
 
     return (0, None)
