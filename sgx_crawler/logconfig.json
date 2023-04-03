@@ -17,11 +17,11 @@
             "class": "logging.handlers.TimedRotatingFileHandler",
             "level": "WARNING",
             "formatter": "normal",
-            "filename": "./info.log"
+            "filename": "./warning.log"
         }
     },
     "loggers": {
-        "sgx_crawler": {
+        "sgx_crawler_default": {
             "level": "DEBUG",
             "handlers": [
                 "console",

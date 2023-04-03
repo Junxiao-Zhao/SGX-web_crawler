@@ -39,5 +39,6 @@
         "/TC.txt": "./data/TC",
         "/TC_structure.dat": "./data/TC_structure"
     },
-    "start-from": 31
+    "start-from": 31,
+    "resume-from": 50
 }
