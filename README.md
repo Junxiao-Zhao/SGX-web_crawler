@@ -51,4 +51,4 @@ user's instructions
 - For some earliest dates, "TC_structure.dat" has the name "TickData_structure.dat" or "ATT\*"; It will be saved to "TC_structure-\*.dat"
 - For some earliest dates, "WEBPXTICK_DT-\*.zip" has the name "\*\_web.tic", and "TC_\*.txt" has the name "\*\_web.atic1". These two will be saved to "WEBPXTICK_DT-\*.tic" and "TC_\*.atic1"
 - For some earliest dates, "WEBPXTICK_DT-\*.zip" has the name "WEBPXTICK_DT-\*.gz" and will be saved as "WEBPXTICK_DT-\*.gz"
-- There exist files that is not corresponding to a trade date, like those on 2023-01-02 and 2023-01-01.
+- There exist files that is not corresponding to a trade date, like those on 2023-01-02 and 2021-01-01.
