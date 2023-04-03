@@ -1,11 +1,9 @@
 import time
-import pprint
 import schedule
 import argparse
 import logging
 import logging.config
-from logging_tree import printout
-from sgx_crawler import sgx_crawler, load_config
+from sgx_crawler import sgx_crawler, load_config, show_config
 
 descrip = "This is a sample crawler to retrieve files from https://www.sgx.com/research-education/derivatives#Historical%20Commodities%20Daily%20Settlement%20Price"
 
@@ -48,6 +46,7 @@ if __name__ == "__main__":
                         "--showconfig",
                         action="store_true",
                         help="show the crawler and logger configuration")
+
     # type: history/today/last trade date
     parser.add_argument("-t",
                         "--type",
@@ -79,7 +78,6 @@ if __name__ == "__main__":
                         "--start",
                         action="store_true",
                         help="start from 'start-from' in the config file")
-
     # at time
     parser.add_argument(
         "-a",
@@ -91,8 +89,6 @@ if __name__ == "__main__":
 
     # parse args
     args = parser.parse_args()
-    """ pprint.pprint(vars(args))
-    exit() """
 
     if args.version:  # -v
         print("sample crawler script version", args.version)
@@ -114,10 +110,7 @@ if __name__ == "__main__":
     sgx = sgx_crawler(args.crawlerconfig, logger, args.start)
 
     if args.showconfig:  # -sc
-        print("\n\nCrawler Configuration:")
-        pprint.pprint(sgx.config)
-        print("\n\nLogger Configuration:")
-        printout((sgx.logger.name, sgx.logger, []))
+        show_config(sgx.config, sgx.logger)
         exit()
 
     # could not work without type
@@ -128,29 +121,37 @@ if __name__ == "__main__":
     args.type = args.type[0]
     args.mode = args.mode[0]
 
-    if args.mode == "once":  # -m
-        sgx.logger.info("Run once")
+    try:
 
-        if args.type == "last":
-            sgx.download_specify(args.files, False, args.refresh)
-        elif args.type == "today":
-            sgx.download_specify(args.files, True, args.refresh)
+        if args.mode == "once":  # -m
+            sgx.logger.info("Run once")
+
+            if args.type == "last":
+                sgx.download_specify(args.files, False, args.refresh)
+            elif args.type == "today":
+                sgx.download_specify(args.files, True, args.refresh)
+            else:
+                sgx.download_history(args.files, args.refresh)
+
         else:
-            sgx.download_history(args.files, args.refresh)
+            sgx.logger.info("Run everday at %s" % args.at)
+            if args.type == "last":
+                schedule.every().day.at(args.at).do(sgx.download_specify,
+                                                    args.files, False,
+                                                    args.refresh)
+            elif args.type == "today":
+                schedule.every().day.at(args.at).do(sgx.download_specify,
+                                                    args.files, True,
+                                                    args.refresh)
+            else:
+                schedule.every().day.at(args.at).do(sgx.download_history,
+                                                    args.files, args.refresh)
 
-    else:
-        sgx.logger.info("Run everday at %s" % args.at)
-        if args.type == "last":
-            schedule.every().day.at(args.at).do(sgx.download_specify,
-                                                args.files, False,
-                                                args.refresh)
-        elif args.type == "today":
-            schedule.every().day.at(args.at).do(sgx.download_specify,
-                                                args.files, True, args.refresh)
-        else:
-            schedule.every().day.at(args.at).do(sgx.download_history,
-                                                args.files, args.refresh)
+            while True:
+                schedule.run_pending()
+                time.sleep(1)
 
-        while True:
-            schedule.run_pending()
-            time.sleep(1)
+    except KeyboardInterrupt:
+        sgx.logger.exception("Keyboard Interrupt; Exit the program",
+                             exc_info=False)
+        exit()

@@ -3,8 +3,8 @@ import re
 import json
 import logging
 import logging.config
-from .utils import load_config, write_config, get, write, date_to_index
 from datetime import datetime
+from .utils import load_config, write_config, get, write, date_to_index
 
 local_crawler_config = os.path.join(os.path.dirname(__file__),
                                     'crawlerconfig.json')

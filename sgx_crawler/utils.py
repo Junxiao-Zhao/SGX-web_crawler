@@ -1,11 +1,26 @@
 import os
 import re
 import json
+import pprint
 import logging
 import requests
 from time import sleep
-from datetime import datetime
 from random import randint
+from datetime import datetime
+from logging_tree import printout
+
+
+def show_config(crawler_config: dict, logger: logging.Logger) -> None:
+    """Print the configuartion infomation
+    
+    :param crawler_config: the config for crawler
+    :param logger: the Logger of this crawler
+    """
+
+    print("\n\nCrawler Configuration:")
+    pprint.pprint(crawler_config)
+    print("\n\nLogger Configuration:")
+    printout((logger.name, logger, []))
 
 
 def load_config(config_path: str, logger: logging.Logger = None) -> dict:
@@ -120,7 +135,7 @@ def write(folder: str,
 
 
 def date_to_index(date: datetime, headers_pool: list,
-                  logger: logging.Logger) -> tuple[int, datetime]:
+                  logger: logging.Logger) -> tuple:
     """find the nearest trade date index of the given date
 
     :param date: a given date after 2023-03-31
