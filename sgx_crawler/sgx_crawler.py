@@ -91,13 +91,17 @@ class sgx_crawler:
         :param refresh: refresh the existing files with new downloads, default False
         """
 
+        leave = False
         try:
+            if self.pendings:
+                self.retry()
+
             indicator = -1
             while indicator != 2:
 
                 # stop when having too many failed tasks
                 if len(self.pendings) > self.max_pending_len:
-                    self.logger.critical("Over %d tasks failed" %
+                    self.logger.critical("Over %d tasks failed; retry" %
                                          self.max_pending_len)
 
                     # try to resume
@@ -128,6 +132,7 @@ class sgx_crawler:
 
         except KeyboardInterrupt:
             self.logger.exception("Keyboard Interrupt", exc_info=False)
+            leave = True
 
         self.index -= 1
         self.logger.debug("Stop update")
@@ -138,8 +143,11 @@ class sgx_crawler:
             self.logger.info("All Success")
 
         self.config["resume-from"] = self.index
-        self.config["failed-tasks"] = self.pendings
-        write_config(self.config_path, self.config, self.logger)
+        if not leave and self.pendings:  # retry failed tasks
+            self.retry()
+        else:
+            self.config["failed-tasks"] = self.pendings
+            write_config(self.config_path, self.config, self.logger)
 
     def download_specify(self,
                          files: list,

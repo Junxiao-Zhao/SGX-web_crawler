@@ -1,10 +1,10 @@
-import os
+import time
+import pprint
+import schedule
 import argparse
 import logging
 import logging.config
-import pprint
-from logging_tree import printout, tree
-from datetime import datetime
+from logging_tree import printout
 from sgx_crawler import sgx_crawler, load_config
 
 descrip = "This is a sample crawler to retrieve files from https://www.sgx.com/research-education/derivatives#Historical%20Commodities%20Daily%20Settlement%20Price"
@@ -64,7 +64,7 @@ if __name__ == "__main__":
                         nargs=1,
                         type=str,
                         choices=["once", "daily"],
-                        default="once",
+                        default=["once"],
                         help="""specify the workding mode (once by default):
                                     once: stop after update once;
                                     daily: update everyday""")
@@ -80,8 +80,19 @@ if __name__ == "__main__":
                         action="store_true",
                         help="start from 'start-from' in the config file")
 
+    # at time
+    parser.add_argument(
+        "-a",
+        "--at",
+        type=str,
+        default="20:00:00",
+        nargs="?",
+        help="specify everyday download time; default 20:00:00")
+
     # parse args
     args = parser.parse_args()
+    """ pprint.pprint(vars(args))
+    exit() """
 
     if args.version:  # -v
         print("sample crawler script version", args.version)
@@ -115,14 +126,31 @@ if __name__ == "__main__":
         exit()
 
     args.type = args.type[0]
-    if args.type == "last":
-        sgx.download_specify(args.files, False, args.refresh)
-    elif args.type == "today":
-        sgx.download_specify(args.files, True, args.refresh)
+    args.mode = args.mode[0]
+
+    if args.mode == "once":  # -m
+        sgx.logger.info("Run once")
+
+        if args.type == "last":
+            sgx.download_specify(args.files, False, args.refresh)
+        elif args.type == "today":
+            sgx.download_specify(args.files, True, args.refresh)
+        else:
+            sgx.download_history(args.files, args.refresh)
+
     else:
-        sgx.download_history(args.files, args.refresh)
+        sgx.logger.info("Run everday at %s" % args.at)
+        if args.type == "last":
+            schedule.every().day.at(args.at).do(sgx.download_specify,
+                                                args.files, False,
+                                                args.refresh)
+        elif args.type == "today":
+            schedule.every().day.at(args.at).do(sgx.download_specify,
+                                                args.files, True, args.refresh)
+        else:
+            schedule.every().day.at(args.at).do(sgx.download_history,
+                                                args.files, args.refresh)
 
-    # print(args)
-    # print(sgx.pendings)
-
-    # if args.mode == "once":
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
