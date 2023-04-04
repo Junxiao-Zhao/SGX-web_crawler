@@ -39,6 +39,8 @@ class sgx_crawler:
             if config_path is None:
                 config_path = local_crawler_config
                 self.logger.info("Use default configuration")
+            else:
+                self.logger.info("Use given configuration")
 
             self.config_path = config_path
             self.config = load_config(self.config_path, logger)
@@ -67,10 +69,9 @@ class sgx_crawler:
         """Retry the failed tasks"""
 
         self.logger.info("Resuming failed tasks...")
-
         num_pending = len(self.pendings)
-
         retry_tasks, self.pendings = self.pendings, list()
+        last_datestr = self.datestr.copy()
 
         while retry_tasks:
             args = retry_tasks.pop(0)
@@ -79,6 +80,8 @@ class sgx_crawler:
         remain = len(self.pendings)
         self.logger.info("Finish resume: total %d, success: %d, fail: %d" %
                          (num_pending, num_pending - remain, remain))
+
+        self.datestr = last_datestr
 
         # write to file
         self.config["failed-tasks"] = self.pendings
@@ -96,8 +99,8 @@ class sgx_crawler:
             if self.pendings:
                 self.retry()
 
-            indicator = -1
-            while indicator != 2:
+            last_date = self.get_last()
+            while self.datestr[1] != last_date:
 
                 # stop when having too many failed tasks
                 if len(self.pendings) > self.max_pending_len:
@@ -117,10 +120,11 @@ class sgx_crawler:
 
                 # download files
                 for id in files:
-                    indicator = self.download_single(self.index, id, refresh)
-                    # no record found --> all history files are retrieved
+                    # indicator =
+                    self.download_single(self.index, id, refresh)
+                    """ # no record found on current index
                     if indicator == 2:
-                        break
+                        break """
 
                 self.index += 1
 
@@ -131,11 +135,15 @@ class sgx_crawler:
                     write_config(self.config_path, self.config, self.logger)
 
         except KeyboardInterrupt:
-            self.logger.exception("Keyboard Interrupt", exc_info=False)
+            self.logger.exception("Keyboard Interrupt; Stop downloading",
+                                  exc_info=False)
             leave = True
 
         self.index -= 1
         self.logger.debug("Stop update")
+
+        if not leave and self.pendings:  # retry failed tasks
+            self.retry()
 
         if self.pendings:
             self.logger.warning("There exist failed tasks")
@@ -143,11 +151,8 @@ class sgx_crawler:
             self.logger.info("All Success")
 
         self.config["resume-from"] = self.index
-        if not leave and self.pendings:  # retry failed tasks
-            self.retry()
-        else:
-            self.config["failed-tasks"] = self.pendings
-            write_config(self.config_path, self.config, self.logger)
+        self.config["failed-tasks"] = self.pendings
+        write_config(self.config_path, self.config, self.logger)
 
     def download_specify(self,
                          files: list,
@@ -198,7 +203,7 @@ class sgx_crawler:
         :return: the status indicator:
             0: wrong parameter
             1: download/write failed; auto-retry
-            2: no record found --> all history files are retrieved
+            2: no record found
             3: success
         """
 
@@ -229,7 +234,8 @@ class sgx_crawler:
 
         # index out of range
         if r.headers["Content-Type"] == "text/html; charset=utf-8":
-            self.logger.debug("All history files are retrieved!")
+            self.logger.warning("File not found: '%s', index %d" %
+                                (default_filenames[file_id][:-4], index))
             return 2
 
         # the right file
@@ -248,7 +254,7 @@ class sgx_crawler:
                 # extract from WEBPXTICK_DT-*.zip
                 else:
                     kwargs = self.get_download.copy()
-                    kwargs["url"] += str(index) + self.file_folder[0][0]
+                    kwargs["url"] += str(index) + self.file_folder[2][0]
                     kwargs["stream"] = True  # just get filename
                     r_temp = get(kwargs, self.headers_pool, self.logger)
 
@@ -280,26 +286,30 @@ class sgx_crawler:
             # success
             return 3
 
-    def is_trade_date(self, check_date: datetime) -> bool:
-        """Check whether the given date is a trade date
-
-        :param check_date: a date
-        :return: True if it's a valid trade date else False
-        """
+    def get_last(self) -> str:
+        """Get the last trade date"""
 
         # get recent 10 trade dates
         r = get(self.get_trade_date, self.headers_pool, self.logger)
 
-        # failed to check the trade date
+        # failed to get the trade date
         if r is None:
-            self.logger.error("Fail to check trade date")
-            return False
+            self.logger.error("Fail to get trade date")
+            return None
 
         try:
             data = json.loads(r.content.decode())['data']
-            last_trade_date = data[-1]["base-date"]
+            return data[-1]["base-date"]
         except KeyError as e:
             self.logger.exception(e, exc_info=False)
-            exit()
+            self.logger.critical("API might change")
+            return None
 
-        return last_trade_date == datetime.strftime(check_date, "%Y%m%d")
+    def is_trade_date(self, check_date: datetime) -> bool:
+        """Check whether the given date is the last trade date
+
+        :param check_date: a date
+        :return: True if it's the last trade date else False
+        """
+
+        return self.get_last() == datetime.strftime(check_date, "%Y%m%d")

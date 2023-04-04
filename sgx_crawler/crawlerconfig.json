@@ -41,6 +41,6 @@
     },
     "start-from": 1,
     "resume-from": 1,
-    "max-pending-length": 100,
+    "max-pending-length": 20,
     "failed-tasks": []
 }

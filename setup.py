@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(name='sgx_crawler',
       packages=find_packages(),
-      version='1.0.0',
+      version='1.0.1',
       author="Junxiao Zhao",
       description="A crawler to download SGX data",
       long_description=long_description,
@@ -14,4 +14,5 @@ setup(name='sgx_crawler',
       license="MIT",
       install_requires=['schedule', 'logging_tree', 'requests'],
       py_modules=['sample_crawler'],
+      package_data={"sgx_crawler": ["crawlerconfig.json", "logconfig.json"]},
       python_requires='>=3.8')

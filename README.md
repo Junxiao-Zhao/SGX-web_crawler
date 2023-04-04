@@ -3,13 +3,14 @@
 This is a web crawler to download the files (WEBPXTICK_DT-\*.zip, TickData_structure.dat, TC_\*.txt, TC_structure.dat) from [Singapore Exchange](https://www.sgx.com/research-education/derivatives#Historical%20Commodities%20Daily%20Settlement%20Price). 
 
 ### Supports:
-- Accept command line options and config files
+- Command line options and config files
 - Download both historical files and today's file based on
 user's instructions
 - Logging
 - Auto-recover failed tasks
 - Resume unfinished tasks
-- Handle KeyBoard Interrupt
+- Handle KeyBoard Interrupt (Press `Ctrl+C` to stop the program)
+- Format filenames
 
 ### Usage
     usage: sample_crawler.py [-h] [-v [VERSION]] [-f [{0,1,2,3} ...]] [-cc [CRAWLERCONFIG]] [-lc [LOGCONFIG]] [-sc] [-t {history,today,last}] [-m {once,daily}] [-r] [-s] [-a [AT]]
@@ -46,9 +47,14 @@ user's instructions
 - To refresh all the history files from the beginning, run `python sample_crawler.py -t history -r -s`
 - To manually resume unfinished tasks, run `python sample_crawler.py -t history`
 
-### Notes
-- Since the data on the website **always has one trade date delay**, so download today's data will **always fail**; Recommend to use download last trade date instead
+### Notice
+- Since the data on the website **ALWAYS has one trade date delay (UTC+8)**, so download today's data will **ALWAYS FAIL**; Recommend to use download last trade date instead
+- **DO NOT** set the "start-from" in the [crawlercconfig.json](./sgx_crawler/crawlerconfig.json) larger than last trade date's index; Otherwise it will result an endless loop.
+- The maximum retry duration depends on "get-download: timeout" and "max-pending-length" in [crawlercconfig.json](./sgx_crawler/crawlerconfig.json), which is `2 * (3 * timeout + 60) * max-pending-length` seconds.
+- Set "file-folder" in [crawlercconfig.json](./sgx_crawler/crawlerconfig.json) to change the storage paths for files 
 - For some earliest dates, "TC_structure.dat" has the name "TickData_structure.dat" or "ATT\*"; It will be saved to "TC_structure-\*.dat"
+- The earlies files are on 2002-10-01
 - For some earliest dates, "WEBPXTICK_DT-\*.zip" has the name "\*\_web.tic", and "TC_\*.txt" has the name "\*\_web.atic1". These two will be saved to "WEBPXTICK_DT-\*.tic" and "TC_\*.atic1"
 - For some earliest dates, "WEBPXTICK_DT-\*.zip" has the name "WEBPXTICK_DT-\*.gz" and will be saved as "WEBPXTICK_DT-\*.gz"
-- There exist files that is not corresponding to a trade date, like those on 2023-01-02 and 2023-01-01.
+- There exist files that is not corresponding to a trade date, like those on 2023-01-02 and 2021-01-01; These files will not be downloaded until next trade date comes.
+- Sometimes some files are missing from the website; if this occurs, the date in the filenames of other files on the same day may be replaced with index
