@@ -3,6 +3,7 @@ import schedule
 import argparse
 import logging
 import logging.config
+import sgx_crawler as sc
 from sgx_crawler import sgx_crawler, load_config, show_config
 
 descrip = "This is a sample crawler to retrieve files from https://www.sgx.com/research-education/derivatives#Historical%20Commodities%20Daily%20Settlement%20Price"
@@ -12,9 +13,7 @@ parser = argparse.ArgumentParser(description=descrip)
 # version
 parser.add_argument("-v",
                     "--version",
-                    const="1.0",
-                    type=str,
-                    nargs="?",
+                    action="store_true",
                     help="print the version of the script")
 # download files
 parser.add_argument("-f",
@@ -89,7 +88,7 @@ parser.add_argument("-a",
 args = parser.parse_args()
 
 if args.version:  # -v
-    print("sample crawler script version", args.version)
+    print("sample crawler script version", sc.__version__)
     exit()
 
 if not args.files:  # -f
