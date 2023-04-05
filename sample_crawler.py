@@ -98,8 +98,9 @@ if args.logconfig:  # -lc
     # use given logger if the config file exists
     logconfig = load_config(args.logconfig)
     logging.config.dictConfig(logconfig)
-    logger = logging.getLogger("sgx_crawler")
-    logger.info("Use given logger")
+    logname = list(logconfig["loggers"].keys())[0]
+    logger = logging.getLogger(logname)
+    logger.info("Use logger: %s" % logname)
 else:
     logger = None
 
